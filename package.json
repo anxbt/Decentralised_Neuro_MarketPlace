@@ -1,0 +1,17 @@
+{
+  "name": "neuromarket",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Decentralized EEG dataset marketplace on Filecoin FVM",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend build",
+    "test:frontend": "pnpm --filter frontend test",
+    "test:backend": "pnpm --filter backend test"
+  },
+  "keywords": ["blockchain", "eeg", "marketplace", "filecoin", "lit-protocol"],
+  "author": "",
+  "license": "MIT"
+}

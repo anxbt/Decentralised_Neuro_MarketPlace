@@ -39,3 +39,6 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Sample datasets - large binary files, share separately or use Git LFS
+sample-datasets/

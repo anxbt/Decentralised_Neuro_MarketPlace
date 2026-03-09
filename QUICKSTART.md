@@ -83,7 +83,7 @@ VITE_CONTRACT_ADDRESS=0x_your_new_address
 
 ### Test 2: View Marketplace
 1. Navigate to "Marketplace"
-2. You should see mock datasets
+2. You should see datasets fetched from the backend (real uploads only)
 3. Click on a dataset to view details
 
 ### Test 3: Upload Dataset (After Task 7.3 Complete)

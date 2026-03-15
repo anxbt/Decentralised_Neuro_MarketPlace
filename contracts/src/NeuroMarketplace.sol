@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.0;
 
 /**
@@ -12,6 +12,7 @@ contract NeuroMarketplace {
         string cid;              // IPFS content identifier
         address researcher;      // Dataset owner
         uint256 price;          // Price in wei (tFIL)
+        bytes32 contentHash;    // SHA-256 hash of plaintext file (for buyer verification)
         bool exists;            // Registration flag
     }
     
@@ -26,7 +27,8 @@ contract NeuroMarketplace {
         string indexed datasetId,
         string cid,
         address indexed researcher,
-        uint256 price
+        uint256 price,
+        bytes32 contentHash
     );
     
     /// @notice Emitted when a dataset is purchased
@@ -42,34 +44,39 @@ contract NeuroMarketplace {
      * @param datasetId Unique identifier for the dataset
      * @param cid IPFS content identifier for the encrypted file
      * @param price Price in wei (tFIL) for purchasing access
+     * @param contentHash SHA-256 hash of the plaintext file (buyers verify post-decrypt)
      * @dev Validates inputs before registration
      * Requirements:
      * - datasetId must not be empty
      * - datasetId must not already exist
      * - cid must not be empty
      * - price must be greater than zero
+     * - contentHash must not be zero
      */
     function registerDataset(
         string memory datasetId,
         string memory cid,
-        uint256 price
+        uint256 price,
+        bytes32 contentHash
     ) external {
         // Input validation (Requirement 8.5)
         require(bytes(datasetId).length > 0, "Dataset ID cannot be empty");
         require(!datasets[datasetId].exists, "Dataset already exists");
         require(bytes(cid).length > 0, "CID cannot be empty");
         require(price > 0, "Price must be greater than zero");
+        require(contentHash != bytes32(0), "Content hash cannot be zero");
         
         // Store dataset information
         datasets[datasetId] = Dataset({
             cid: cid,
             researcher: msg.sender,
             price: price,
+            contentHash: contentHash,
             exists: true
         });
         
         // Emit event for state change (Requirement 8.6)
-        emit DatasetRegistered(datasetId, cid, msg.sender, price);
+        emit DatasetRegistered(datasetId, cid, msg.sender, price, contentHash);
     }
     
     /**
@@ -125,16 +132,17 @@ contract NeuroMarketplace {
      * @return cid IPFS content identifier
      * @return researcher Dataset owner address
      * @return price Price in wei (tFIL)
+     * @return contentHash SHA-256 hash of the plaintext file
      * @dev Reverts if dataset does not exist
      */
     function getDataset(string memory datasetId) 
         external 
         view 
-        returns (string memory cid, address researcher, uint256 price) 
+        returns (string memory cid, address researcher, uint256 price, bytes32 contentHash) 
     {
         Dataset storage dataset = datasets[datasetId];
         require(dataset.exists, "Dataset does not exist");
-        return (dataset.cid, dataset.researcher, dataset.price);
+        return (dataset.cid, dataset.researcher, dataset.price, dataset.contentHash);
     }
 }
 

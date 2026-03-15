@@ -4,6 +4,7 @@ import { Search, Loader2 } from "lucide-react";
 import EEGWaveform from "@/components/EEGWaveform";
 import PDPProofBadge from "@/components/PDPProofBadge";
 import { fetchDatasets, type Dataset as ApiDataset } from "@/lib/api";
+import { CONTRACT_ADDRESS, NEURO_MARKETPLACE_ABI } from "@/lib/contract";
 import { toast } from "sonner";
 
 // Map backend dataset to display format
@@ -99,9 +100,51 @@ const Marketplace: React.FC = () => {
         setDatasets(displayDatasets);
         console.log(`Loaded ${displayDatasets.length} datasets from backend`);
       } catch (err) {
-        console.error("Error loading datasets:", err);
-        setError(err instanceof Error ? err.message : "Failed to load datasets");
-        toast.error("Failed to load marketplace datasets");
+        console.error("Error loading datasets from backend, trying on-chain fallback:", err);
+
+        // On-chain event fallback — read DatasetRegistered events from the contract
+        try {
+          const { ethers } = await import("ethers");
+          if (window.ethereum) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, NEURO_MARKETPLACE_ABI, provider);
+
+            // Query last 10,000 blocks for DatasetRegistered events
+            const currentBlock = await provider.getBlockNumber();
+            const fromBlock = Math.max(0, currentBlock - 10000);
+            const events = await contract.queryFilter("DatasetRegistered", fromBlock, currentBlock);
+
+            const onChainDatasets: DisplayDataset[] = events.map((event: any) => {
+              const args = event.args;
+              return {
+                id: args.datasetId || "unknown",
+                name: args.datasetId || "On-chain Dataset",
+                type: "EEG Dataset",
+                channels: 32,
+                duration: "N/A",
+                sampleRate: "256 Hz",
+                fileSize: "N/A",
+                price: ethers.formatEther(args.price || 0),
+                researcher: (args.researcher || "").substring(0, 6) + "..." + (args.researcher || "").substring(38),
+                institution: "On-chain Record",
+                purchases: 0,
+                description: "Loaded from on-chain events (backend unavailable)",
+                cid: args.cid || "",
+                listedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              };
+            });
+
+            setDatasets(onChainDatasets);
+            console.log(`Loaded ${onChainDatasets.length} datasets from on-chain events (fallback)`);
+            toast.info("Backend unavailable — showing on-chain data");
+          } else {
+            throw new Error("No wallet connected for on-chain fallback");
+          }
+        } catch (chainErr) {
+          console.error("On-chain fallback also failed:", chainErr);
+          setError("Failed to load datasets from backend and on-chain");
+          toast.error("Failed to load marketplace datasets");
+        }
       } finally {
         setLoading(false);
       }

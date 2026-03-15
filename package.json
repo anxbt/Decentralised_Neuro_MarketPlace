@@ -13,5 +13,5 @@
   },
   "keywords": ["blockchain", "eeg", "marketplace", "filecoin", "lit-protocol"],
   "author": "",
-  "license": "MIT"
+  "license": "MIT OR Apache-2.0"
 }

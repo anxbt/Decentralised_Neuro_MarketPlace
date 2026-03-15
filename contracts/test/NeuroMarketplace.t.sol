@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
@@ -9,6 +9,7 @@ contract NeuroMarketplaceTest is Test {
     
     address public researcher = address(0x1);
     address public buyer = address(0x2);
+    bytes32 public constant TEST_HASH = keccak256("test EEG data content");
     
     function setUp() public {
         marketplace = new NeuroMarketplace();
@@ -21,14 +22,15 @@ contract NeuroMarketplaceTest is Test {
         uint256 price = 1 ether;
         
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
-        (string memory storedCid, address storedResearcher, uint256 storedPrice, bool exists) = 
+        (string memory storedCid, address storedResearcher, uint256 storedPrice, bytes32 storedHash, bool exists) = 
             marketplace.datasets(datasetId);
         
         assertEq(storedCid, cid);
         assertEq(storedResearcher, researcher);
         assertEq(storedPrice, price);
+        assertEq(storedHash, TEST_HASH);
         assertTrue(exists);
     }
     
@@ -39,10 +41,10 @@ contract NeuroMarketplaceTest is Test {
         uint256 price = 1 ether;
         
         vm.expectEmit(true, true, false, true);
-        emit DatasetRegistered(datasetId, cid, researcher, price);
+        emit DatasetRegistered(datasetId, cid, researcher, price, TEST_HASH);
         
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
     }
     
     /// @notice Event declaration for testing
@@ -50,25 +52,32 @@ contract NeuroMarketplaceTest is Test {
         string indexed datasetId,
         string cid,
         address indexed researcher,
-        uint256 price
+        uint256 price,
+        bytes32 contentHash
     );
     
     /// @notice Test registration with empty dataset ID reverts
     function testRegisterDatasetEmptyIdReverts() public {
         vm.expectRevert("Dataset ID cannot be empty");
-        marketplace.registerDataset("", "QmTest123", 1 ether);
+        marketplace.registerDataset("", "QmTest123", 1 ether, TEST_HASH);
     }
     
     /// @notice Test registration with empty CID reverts
     function testRegisterDatasetEmptyCidReverts() public {
         vm.expectRevert("CID cannot be empty");
-        marketplace.registerDataset("dataset1", "", 1 ether);
+        marketplace.registerDataset("dataset1", "", 1 ether, TEST_HASH);
     }
     
     /// @notice Test registration with zero price reverts
     function testRegisterDatasetZeroPriceReverts() public {
         vm.expectRevert("Price must be greater than zero");
-        marketplace.registerDataset("dataset1", "QmTest123", 0);
+        marketplace.registerDataset("dataset1", "QmTest123", 0, TEST_HASH);
+    }
+    
+    /// @notice Test registration with zero content hash reverts
+    function testRegisterDatasetZeroHashReverts() public {
+        vm.expectRevert("Content hash cannot be zero");
+        marketplace.registerDataset("dataset1", "QmTest123", 1 ether, bytes32(0));
     }
     
     /// @notice Test duplicate registration reverts
@@ -76,10 +85,10 @@ contract NeuroMarketplaceTest is Test {
         string memory datasetId = "dataset1";
         
         vm.startPrank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", 1 ether);
+        marketplace.registerDataset(datasetId, "QmTest123", 1 ether, TEST_HASH);
         
         vm.expectRevert("Dataset already exists");
-        marketplace.registerDataset(datasetId, "QmTest456", 2 ether);
+        marketplace.registerDataset(datasetId, "QmTest456", 2 ether, TEST_HASH);
         vm.stopPrank();
     }
     
@@ -107,13 +116,14 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Verify all metadata fields are complete and non-empty
         (
             string memory storedCid,
             address storedResearcher,
             uint256 storedPrice,
+            bytes32 storedHash,
             bool exists
         ) = marketplace.datasets(datasetId);
         
@@ -122,11 +132,13 @@ contract NeuroMarketplaceTest is Test {
         assertTrue(bytes(storedCid).length > 0, "CID must not be empty");
         assertTrue(storedResearcher != address(0), "Researcher address must not be zero");
         assertTrue(storedPrice > 0, "Price must be greater than zero");
+        assertTrue(storedHash != bytes32(0), "Content hash must not be zero");
         
         // Verify stored values match input
         assertEq(storedCid, cid, "Stored CID must match input");
         assertEq(storedResearcher, researcher, "Stored researcher must match caller");
         assertEq(storedPrice, price, "Stored price must match input");
+        assertEq(storedHash, TEST_HASH, "Stored content hash must match input");
     }
     
     // ============================================
@@ -149,7 +161,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -176,7 +188,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -197,7 +209,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -224,7 +236,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -245,7 +257,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", 1 ether);
+        marketplace.registerDataset(datasetId, "QmTest123", 1 ether, TEST_HASH);
         
         // Verify buyer has no access
         assertFalse(marketplace.hasAccess(datasetId, buyer));
@@ -259,15 +271,16 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Get dataset info
-        (string memory returnedCid, address returnedResearcher, uint256 returnedPrice) = 
+        (string memory returnedCid, address returnedResearcher, uint256 returnedPrice, bytes32 returnedHash) = 
             marketplace.getDataset(datasetId);
         
         assertEq(returnedCid, cid);
         assertEq(returnedResearcher, researcher);
         assertEq(returnedPrice, price);
+        assertEq(returnedHash, TEST_HASH);
     }
     
     /// @notice Test getDataset reverts for non-existent dataset
@@ -288,7 +301,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -307,7 +320,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Give buyer funds
         vm.deal(buyer, 10 ether);
@@ -326,7 +339,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Try to purchase with zero payment
         vm.prank(buyer);
@@ -338,7 +351,7 @@ contract NeuroMarketplaceTest is Test {
     /// @dev Validates Requirement 8.5 - input validation
     function testSecurityRegisterWithEmptyDatasetIdReverts() public {
         vm.expectRevert("Dataset ID cannot be empty");
-        marketplace.registerDataset("", "QmTest123", 1 ether);
+        marketplace.registerDataset("", "QmTest123", 1 ether, TEST_HASH);
     }
     
     /// @notice Security Test: Multiple buyers cannot interfere with each other's access
@@ -350,7 +363,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // First buyer purchases
         vm.deal(buyer, 10 ether);
@@ -380,7 +393,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", 1 ether);
+        marketplace.registerDataset(datasetId, "QmTest123", 1 ether, TEST_HASH);
         
         // Verify researcher does NOT have automatic access
         assertFalse(marketplace.hasAccess(datasetId, researcher));
@@ -401,7 +414,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Give buyer sufficient funds for multiple attempts
         vm.deal(buyer, 10 ether);
@@ -430,7 +443,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset from first researcher
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, "QmTest123", price);
+        marketplace.registerDataset(datasetId, "QmTest123", price, TEST_HASH);
         
         // Record balances
         uint256 researcher1BalanceBefore = researcher.balance;
@@ -453,15 +466,15 @@ contract NeuroMarketplaceTest is Test {
         
         // Empty dataset ID
         vm.expectRevert("Dataset ID cannot be empty");
-        marketplace.registerDataset("", "QmTest123", 1 ether);
+        marketplace.registerDataset("", "QmTest123", 1 ether, TEST_HASH);
         
         // Empty CID
         vm.expectRevert("CID cannot be empty");
-        marketplace.registerDataset("dataset1", "", 1 ether);
+        marketplace.registerDataset("dataset1", "", 1 ether, TEST_HASH);
         
         // Zero price
         vm.expectRevert("Price must be greater than zero");
-        marketplace.registerDataset("dataset1", "QmTest123", 0);
+        marketplace.registerDataset("dataset1", "QmTest123", 0, TEST_HASH);
         
         // Verify no datasets were created
         vm.expectRevert("Dataset does not exist");
@@ -486,7 +499,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Give buyer sufficient funds
         vm.deal(buyer, price + 1 ether);
@@ -538,7 +551,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Give buyer sufficient funds for multiple purchases
         vm.deal(buyer, price * 3);
@@ -590,7 +603,7 @@ contract NeuroMarketplaceTest is Test {
         
         // Register dataset
         vm.prank(researcher);
-        marketplace.registerDataset(datasetId, cid, price);
+        marketplace.registerDataset(datasetId, cid, price, TEST_HASH);
         
         // Property 1: Before purchase, no one has access
         assertFalse(

@@ -5,6 +5,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 const navItems = [
   { label: "Marketplace", path: "/marketplace" },
   { label: "List Dataset", path: "/upload" },
+  { label: "Verify", path: "/verify" },
   { label: "Dashboard", path: "/dashboard" },
 ];
 

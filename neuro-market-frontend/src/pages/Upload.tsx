@@ -2,13 +2,22 @@ import React, { useState, useEffect } from "react";
 import { Upload, Check, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useWallet } from "@/contexts/WalletContext";
-import { encryptFile } from "@/lib/lit";
+import { encryptMessage } from "@/lib/lit";
 import { getSynapseManager } from "@/lib/synapseStorage";
 import { registerDataset } from "@/lib/contract";
 import { createDataset } from "@/lib/api";
 import { toast } from "sonner";
 
 const datasetTypes = ["Sleep EEG", "Motor Imagery", "Cognitive", "P300", "SSVEP", "Clinical", "Multimodal", "Other"];
+
+const toBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+};
 
 const uploadSteps = [
   "Encrypting with Lit Protocol",
@@ -115,10 +124,39 @@ const UploadPage: React.FC = () => {
 
       console.log("[Upload] Starting upload pipeline for dataset:", datasetId);
 
-      // Step 1: Encrypt file with Lit Protocol
+      // Compute SHA-256 content hash of the plaintext file BEFORE encryption
+      console.log("[Upload] Computing content hash of plaintext file...");
+      const fileBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", fileBuffer);
+      const contentHash = "0x" + Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+      console.log("[Upload] Content hash (SHA-256):", contentHash);
+
+      // Step 1: Encrypt file with AES-GCM and protect the key with Lit Protocol
       console.log("[Upload] Step 1: Encrypting file with Lit Protocol...");
-      const { ciphertext, dataToEncryptHash } = await encryptFile(file, datasetId);
+
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const aesKey = await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 },
+        true,
+        ["encrypt", "decrypt"]
+      );
+      const rawKey = await crypto.subtle.exportKey("raw", aesKey);
+      const keyBase64 = toBase64(new Uint8Array(rawKey));
+
+      const encryptedBuffer = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        aesKey,
+        fileBuffer
+      );
+
+      const encryptedFileBase64 = toBase64(new Uint8Array(encryptedBuffer));
+
+      const ivBase64 = toBase64(iv);
+
+      const { ciphertext, dataToEncryptHash } = await encryptMessage(keyBase64, datasetId);
       console.log("[Upload] Encryption complete. Hash:", dataToEncryptHash);
+      console.log("[Upload] Lit ciphertext length:", ciphertext.length, "chars");
+      console.log("[Upload] Encrypted file base64 length:", encryptedFileBase64.length, "chars");
       setCurrentStep(1);
 
       // Step 2: Upload encrypted file to Filecoin storage via Synapse SDK
@@ -168,9 +206,18 @@ const UploadPage: React.FC = () => {
         // Don't block upload — the SDK may handle setup internally
       }
 
-      // Convert ciphertext string to Uint8Array for upload
+      // Convert encrypted file + Lit-encrypted key to JSON envelope for upload
+      const envelope = JSON.stringify({
+        version: "v2",
+        encryptedFile: encryptedFileBase64,
+        iv: ivBase64,
+        litCiphertext: ciphertext,
+        litDataToEncryptHash: dataToEncryptHash,
+        fileName: file.name,
+        fileType: file.type || "application/octet-stream",
+      });
       const encoder = new TextEncoder();
-      const encryptedData = encoder.encode(ciphertext);
+      const encryptedData = encoder.encode(envelope);
 
       const uploadResult = await synapseManager.uploadFile(encryptedData);
       const pieceCid = uploadResult.pieceCid;
@@ -180,7 +227,7 @@ const UploadPage: React.FC = () => {
 
       // Step 3: Register on smart contract
       console.log("[Upload] Step 3: Registering on Filecoin FVM...");
-      const txResult = await registerDataset(datasetId, pieceCid, formData.price);
+      const txResult = await registerDataset(datasetId, pieceCid, formData.price, contentHash);
       console.log("[Upload] Transaction submitted. Hash:", txResult.hash);
 
       // Wait for transaction confirmation

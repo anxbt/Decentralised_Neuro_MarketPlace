@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { purchaseDataset } from "@/lib/contract";
-import { recordPurchase } from "@/lib/api";
 import { getSynapseManager } from "@/lib/synapseStorage";
-import { decryptFile } from "@/lib/lit";
+import { decryptFile, decryptMessage } from "@/lib/lit";
+import { ethers } from "ethers";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Check, Download, AlertCircle } from "lucide-react";
@@ -57,6 +57,15 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const fromBase64 = (base64: string): Uint8Array => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  };
+
   const steps = hasAccess 
     ? ["Fetching encrypted file", "Verifying access", "Decrypting file", "Ready to download"]
     : ["Sending tFIL to contract", "Confirming on Filecoin FVM", "Recording purchase", "Ready to download"];
@@ -106,19 +115,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
       console.log(`[Purchase] Transaction confirmed in block ${receipt.blockNumber}`);
       setCurrentStep(2);
 
-      // Step 3: Record purchase in backend
-      try {
-        await recordPurchase({
-          dataset_id: datasetId,
-          buyer_address: address,
-          tx_hash: result.hash,
-        });
-        console.log(`[Purchase] Purchase recorded in backend`);
-      } catch (backendError) {
-        console.warn("[Purchase] Failed to record purchase in backend:", backendError);
-        // Don't fail the whole purchase if backend recording fails
-      }
-
+      // Purchase recorded on-chain via DatasetPurchased event (no backend needed)
       setCurrentStep(3);
       
       // Call success callback
@@ -209,11 +206,63 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
       
       // Step 2: Decrypt file using Lit Protocol
       toast.info("Decrypting file with Lit Protocol...");
-      const decryptedFile = await decryptFile(
-        encryptedData,
-        datasetId,
-        address
-      );
+
+      const decoder = new TextDecoder();
+      const envelopeStr = decoder.decode(encryptedData);
+
+      // Get ethers signer from browser wallet
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      let decryptedFile: File;
+
+      let envelope: any;
+      try {
+        envelope = JSON.parse(envelopeStr);
+      } catch {
+        throw new Error('Downloaded payload is not a valid encrypted envelope.');
+      }
+
+      console.log('[Download] Envelope version:', envelope?.version || 'LEGACY (no version)');
+      console.log('[Download] Envelope keys:', Object.keys(envelope));
+
+      if (envelope?.version === "v2") {
+        console.log('[Download] Using v2 decryption (AES-GCM + Lit key)');
+        const keyBase64 = await decryptMessage(
+          envelope.litCiphertext,
+          envelope.litDataToEncryptHash,
+          datasetId,
+          signer
+        );
+
+        const keyBytes = fromBase64(keyBase64);
+        const ivBytes = fromBase64(envelope.iv);
+        const encryptedBytes = fromBase64(envelope.encryptedFile);
+
+        const aesKey = await crypto.subtle.importKey(
+          "raw",
+          keyBytes,
+          { name: "AES-GCM" },
+          false,
+          ["decrypt"]
+        );
+
+        const decryptedBuffer = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: ivBytes },
+          aesKey,
+          encryptedBytes
+        );
+
+        const fileName = envelope.fileName || `${datasetName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.edf`;
+        const fileType = envelope.fileType || "application/octet-stream";
+        decryptedFile = new File([decryptedBuffer], fileName, { type: fileType });
+      } else if (envelope?.ciphertext && envelope?.dataToEncryptHash) {
+        console.warn('[Download] WARNING: Legacy envelope detected. This dataset was uploaded before the v2 encryption fix.');
+        console.warn('[Download] Legacy ciphertext length:', envelope.ciphertext.length, 'chars — this WILL fail if > ~1MB');
+        throw new Error('This dataset was uploaded with an older encryption format that is no longer supported. Please ask the researcher to re-upload it.');
+      } else {
+        throw new Error('Unsupported encrypted envelope format');
+      }
       
       console.log(`[Download] Decryption successful`);
       

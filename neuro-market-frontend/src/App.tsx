@@ -12,6 +12,7 @@ import Marketplace from "./pages/Marketplace";
 import DatasetDetail from "./pages/DatasetDetail";
 import Upload from "./pages/Upload";
 import Dashboard from "./pages/Dashboard";
+import Verify from "./pages/Verify";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -19,7 +20,7 @@ const queryClient = new QueryClient();
 // Initialize Lit Protocol client with contract address
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 if (CONTRACT_ADDRESS) {
-  initializeLitClient(CONTRACT_ADDRESS, 'filecoin');
+  initializeLitClient(CONTRACT_ADDRESS, 'filecoinCalibrationTestnet');
 } else {
   console.warn('VITE_CONTRACT_ADDRESS not set. Lit Protocol encryption will not work.');
 }
@@ -38,6 +39,8 @@ const App = () => (
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/dataset/:id" element={<DatasetDetail />} />
             <Route path="/upload" element={<Upload />} />
+            <Route path="/verify" element={<Verify />} />
+            <Route path="/verify/:pieceCid" element={<Verify />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

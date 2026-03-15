@@ -4,21 +4,62 @@ interface EEGWaveformProps {
   variant: "hero" | "card" | "detail";
 }
 
-function generateChannel(length: number, amplitude: number, seed: number): string {
+/**
+ * Generate a realistic EEG-like channel signal using superimposed
+ * brainwave frequency bands (delta, theta, alpha, beta, gamma) plus
+ * occasional spike/artifact transients that mimic real recordings.
+ */
+function generateChannel(length: number, amplitude: number, seed: number, bandIndex: number): string {
   const points: number[] = [];
-  let y = 0;
+
+  // Frequency bands (cycles per sample) tuned to approximate real EEG at ~256 Hz
+  // Delta 0.5-4 Hz, Theta 4-8 Hz, Alpha 8-13 Hz, Beta 13-30 Hz, Gamma 30-50 Hz
+  const bands = [
+    { freq: 0.012, weight: 0.45 },  // delta
+    { freq: 0.035, weight: 0.30 },  // theta
+    { freq: 0.065, weight: 0.25 },  // alpha
+    { freq: 0.12,  weight: 0.15 },  // beta
+    { freq: 0.22,  weight: 0.08 },  // gamma
+  ];
+
+  // Emphasize the band this channel represents
+  const emphasizedBands = bands.map((b, i) => ({
+    ...b,
+    weight: i === bandIndex ? b.weight * 2.5 : b.weight,
+  }));
+
+  // Seeded pseudo-random for deterministic per-card noise
+  let rng = seed * 9301 + 49297;
+  const pseudoRand = () => {
+    rng = (rng * 9301 + 49297) % 233280;
+    return rng / 233280 - 0.5;
+  };
+
   for (let i = 0; i < length; i++) {
-    const noise = Math.sin(i * 0.1 + seed) * amplitude * 0.3
-      + Math.sin(i * 0.37 + seed * 2) * amplitude * 0.2
-      + Math.sin(i * 0.73 + seed * 3) * amplitude * 0.15
-      + (Math.sin(i * 1.7 + seed * 5) > 0.7 ? amplitude * 0.6 * Math.sin(i * 2.3 + seed) : 0)
-      + Math.sin(i * 0.02 + seed) * amplitude * 0.4;
-    y = noise;
+    let y = 0;
+
+    // Composite signal from all bands
+    for (const { freq, weight } of emphasizedBands) {
+      y += Math.sin(i * freq + seed * 1.7) * amplitude * weight;
+      y += Math.sin(i * freq * 1.618 + seed * 0.3) * amplitude * weight * 0.3; // harmonic
+    }
+
+    // Pink noise envelope (slow modulation)
+    y *= 0.7 + 0.3 * Math.sin(i * 0.003 + seed * 2.1);
+
+    // Occasional sharp transients (eye blinks / K-complexes) — ~2% of samples
+    const spike = pseudoRand();
+    if (Math.abs(spike) > 0.46) {
+      y += spike * amplitude * 1.4;
+    }
+
     points.push(y);
   }
+
   return points.map((p, i) => `${i},${p}`).join(" ");
 }
 
+const bandLabels = ["δ Delta", "θ Theta", "α Alpha", "β Beta"];
 const greekLabels = ["δ", "θ", "α", "β"];
 
 const EEGWaveform: React.FC<EEGWaveformProps> = ({ variant }) => {
@@ -37,7 +78,7 @@ const EEGWaveform: React.FC<EEGWaveformProps> = ({ variant }) => {
     const amp = height / (channelCount * 2.5);
     return configs.slice(0, channelCount).map((c, i) => {
       const offsetY = (height / (channelCount + 1)) * (i + 1);
-      const pointsStr = generateChannel(width * 2, amp, c.seed);
+      const pointsStr = generateChannel(width * 2, amp, c.seed, i);
       return { ...c, offsetY, pointsStr };
     });
   }, [height, channelCount]);

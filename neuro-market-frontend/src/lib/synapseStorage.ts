@@ -361,9 +361,18 @@ class SynapseStorageManager {
 
       console.log('[Synapse] Downloading file with PieceCID:', pieceCid);
 
-      // Download via Synapse storage manager (SDK v0.38.0 API)
-      const response = await synapse.storage.download({ pieceCid });
-      const data = new Uint8Array(await response.arrayBuffer());
+      // Attempt download — try with CDN first, then without on stream errors
+      let data: Uint8Array;
+      try {
+        data = await synapse.storage.download({ pieceCid });
+      } catch (firstErr: any) {
+        if (firstErr?.name === 'AbortError' || firstErr?.message?.includes('aborted')) {
+          console.warn('[Synapse] Stream aborted, retrying without CDN...');
+          data = await synapse.storage.download({ pieceCid, withCDN: false });
+        } else {
+          throw firstErr;
+        }
+      }
 
       console.log('[Synapse] Download complete!', data.length, 'bytes');
 

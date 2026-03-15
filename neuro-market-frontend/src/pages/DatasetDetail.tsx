@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useWallet } from "@/contexts/WalletContext";
 import { fetchDatasetById, type Dataset as ApiDataset } from "@/lib/api";
 import { hasAccess } from "@/lib/contract";
 import EEGWaveform from "@/components/EEGWaveform";
 import PurchaseModal from "@/components/PurchaseModal";
 import PDPProofBadge from "@/components/PDPProofBadge";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const DatasetDetail: React.FC = () => {
@@ -167,6 +167,15 @@ const DatasetDetail: React.FC = () => {
             </div>
           )}
 
+          {/* Verify Integrity Link */}
+          <Link
+            to={`/verify?datasetId=${encodeURIComponent(dataset.id)}`}
+            className="mt-4 inline-flex items-center gap-2 rounded-[3px] border border-primary/30 bg-primary/5 px-4 py-2.5 font-mono text-xs text-primary transition-colors hover:bg-primary/10"
+          >
+            <ShieldCheck size={14} />
+            Verify Dataset Integrity On-Chain
+          </Link>
+
           {/* Researcher */}
           <p className="label-uppercase mt-8 text-[10px] text-primary" style={{ letterSpacing: "0.1em" }}>
             RESEARCHER
@@ -199,6 +208,9 @@ const DatasetDetail: React.FC = () => {
               </span>
               <span className="inline-flex rounded-[3px] border px-2.5 py-1 font-mono text-[10px] text-badge-green" style={{ borderColor: "rgba(74,222,128,0.2)", backgroundColor: "rgba(74,222,128,0.06)" }}>
                 ✓ Filecoin verified
+              </span>
+              <span className="inline-flex rounded-[3px] border px-2.5 py-1 font-mono text-[10px] text-badge-green" style={{ borderColor: "rgba(74,222,128,0.2)", backgroundColor: "rgba(74,222,128,0.06)" }}>
+                🛡️ Content hash on-chain
               </span>
               <span className="inline-flex rounded-[3px] border px-2.5 py-1 font-mono text-[10px] text-primary" style={{ borderColor: "rgba(249,115,22,0.2)", backgroundColor: "rgba(249,115,22,0.06)" }}>
                 📡 PhysioNet source

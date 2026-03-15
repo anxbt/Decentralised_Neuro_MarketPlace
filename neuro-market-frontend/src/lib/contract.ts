@@ -33,6 +33,7 @@ const NEURO_MARKETPLACE_ABI = [
       { "name": "cid", "type": "string", "internalType": "string" },
       { "name": "researcher", "type": "address", "internalType": "address" },
       { "name": "price", "type": "uint256", "internalType": "uint256" },
+      { "name": "contentHash", "type": "bytes32", "internalType": "bytes32" },
       { "name": "exists", "type": "bool", "internalType": "bool" }
     ],
     "stateMutability": "view"
@@ -44,7 +45,8 @@ const NEURO_MARKETPLACE_ABI = [
     "outputs": [
       { "name": "cid", "type": "string", "internalType": "string" },
       { "name": "researcher", "type": "address", "internalType": "address" },
-      { "name": "price", "type": "uint256", "internalType": "uint256" }
+      { "name": "price", "type": "uint256", "internalType": "uint256" },
+      { "name": "contentHash", "type": "bytes32", "internalType": "bytes32" }
     ],
     "stateMutability": "view"
   },
@@ -71,7 +73,8 @@ const NEURO_MARKETPLACE_ABI = [
     "inputs": [
       { "name": "datasetId", "type": "string", "internalType": "string" },
       { "name": "cid", "type": "string", "internalType": "string" },
-      { "name": "price", "type": "uint256", "internalType": "uint256" }
+      { "name": "price", "type": "uint256", "internalType": "uint256" },
+      { "name": "contentHash", "type": "bytes32", "internalType": "bytes32" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -94,14 +97,15 @@ const NEURO_MARKETPLACE_ABI = [
       { "name": "datasetId", "type": "string", "indexed": true, "internalType": "string" },
       { "name": "cid", "type": "string", "indexed": false, "internalType": "string" },
       { "name": "researcher", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "price", "type": "uint256", "indexed": false, "internalType": "uint256" }
+      { "name": "price", "type": "uint256", "indexed": false, "internalType": "uint256" },
+      { "name": "contentHash", "type": "bytes32", "indexed": false, "internalType": "bytes32" }
     ],
     "anonymous": false
   }
 ];
 
 // Contract address on Filecoin FVM Calibration testnet
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x8F61BF10258AB489d841B5dEdB49A98f738Cc430';
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b';
 
 // Chain ID for Filecoin FVM Calibration testnet
 export const FILECOIN_CALIBRATION_CHAIN_ID = 314159;
@@ -113,6 +117,7 @@ export interface Dataset {
   cid: string;
   researcher: string;
   price: bigint;
+  contentHash: string;
   exists: boolean;
 }
 
@@ -183,14 +188,18 @@ function getContractWithProvider(): Contract {
 export async function registerDataset(
   datasetId: string,
   cid: string,
-  priceInTFIL: string
+  priceInTFIL: string,
+  contentHash?: string
 ): Promise<TransactionResult> {
   try {
     const contract = await getContractWithSigner();
     const priceInWei = parseEther(priceInTFIL);
 
-    // Call the registerDataset function
-    const tx = await contract.registerDataset(datasetId, cid, priceInWei);
+    // Use provided contentHash or compute a zero hash as fallback
+    const hash = contentHash || ethers.keccak256(ethers.toUtf8Bytes(cid));
+
+    // Call the registerDataset function with contentHash
+    const tx = await contract.registerDataset(datasetId, cid, priceInWei, hash);
 
     return {
       hash: tx.hash,
@@ -292,12 +301,13 @@ export async function hasAccess(datasetId: string, address: string): Promise<boo
 export async function getDataset(datasetId: string): Promise<Dataset> {
   try {
     const contract = getContractWithProvider();
-    const [cid, researcher, price] = await contract.getDataset(datasetId);
+    const [cid, researcher, price, contentHash] = await contract.getDataset(datasetId);
 
     return {
       cid,
       researcher,
       price,
+      contentHash,
       exists: true
     };
   } catch (error: any) {

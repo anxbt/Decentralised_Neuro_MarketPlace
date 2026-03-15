@@ -19,9 +19,11 @@ import { createLitClient } from '@lit-protocol/lit-client';
 import { nagaDev } from '@lit-protocol/networks';
 import { createAuthManager, storagePlugins } from '@lit-protocol/auth';
 import { ethers } from 'ethers';
+import { createWalletClient, custom } from 'viem';
+import { filecoinCalibration } from '@/config/wagmi';
 
 // Contract address for access control verification
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x8F61BF10258AB489d841B5dEdB49A98f738Cc430';
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b';
 
 /**
  * Configuration for Lit Protocol client
@@ -69,7 +71,6 @@ class LitProtocolClient {
   private authManager: any | null = null;
   private config: LitConfig;
   private isConnecting: boolean = false;
-  private useFallback: boolean = false;
 
   constructor(config: LitConfig) {
     this.config = config;
@@ -108,13 +109,10 @@ class LitProtocolClient {
       });
 
       console.log('[Lit v8] Connected to Naga Dev network successfully!');
-      this.useFallback = false;
     } catch (error) {
       console.error('[Lit v8] Failed to connect:', error);
-      console.warn('[Lit v8] ⚠️ Lit nodes unreachable — enabling local encryption fallback');
       this.litClient = null;
-      this.useFallback = true;
-      // Don't throw — allow fallback encryption
+      throw new Error('Lit Protocol is unavailable. Cannot encrypt securely. Please try again later.');
     } finally {
       this.isConnecting = false;
     }
@@ -124,8 +122,11 @@ class LitProtocolClient {
    * Get the connected Lit client
    */
   private async getClient(): Promise<any> {
-    if (!this.litClient && !this.useFallback) {
+    if (!this.litClient) {
       await this.connect();
+    }
+    if (!this.litClient) {
+      throw new Error('Lit Protocol is unavailable. Cannot encrypt securely. Upload blocked for your protection.');
     }
     return this.litClient;
   }
@@ -175,49 +176,43 @@ class LitProtocolClient {
     ];
   }
 
-  /**
-   * Fallback encryption using Web Crypto API (AES-GCM)
-   * Used when Lit Protocol nodes are unreachable (development/demo)
-   */
-  private async fallbackEncrypt(data: string): Promise<EncryptionResult> {
-    console.warn('[Lit v8] ⚠️ Using LOCAL fallback encryption (NOT Lit Protocol). For demo/dev only.');
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(data);
+  private async createEoaAuthContext(signer: ethers.Signer): Promise<any> {
+    if (!(window as any).ethereum) {
+      throw new Error('No Ethereum provider found. Please connect a wallet.');
+    }
 
-    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, dataBytes);
-    const exportedKey = await crypto.subtle.exportKey('raw', key);
+    const address = await signer.getAddress();
+    const walletClient = createWalletClient({
+      account: address as `0x${string}`,
+      chain: filecoinCalibration,
+      transport: custom((window as any).ethereum),
+    });
 
-    const combined = new Uint8Array(iv.length + exportedKey.byteLength + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(exportedKey), iv.length);
-    combined.set(new Uint8Array(encrypted), iv.length + exportedKey.byteLength);
-
-    const ciphertext = btoa(String.fromCharCode(...combined));
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
-    const hashArray = new Uint8Array(hashBuffer);
-    const dataToEncryptHash = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    return { ciphertext, dataToEncryptHash };
+    return await this.authManager.createEoaAuthContext({
+      config: { account: walletClient },
+      authConfig: {
+        domain: window.location.hostname,
+        statement: 'Authorize Lit session for NeuroMarket dataset decryption',
+        resources: [['access-control-condition-decryption', '*']],
+        expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      },
+      litClient: await this.getClient(),
+    });
   }
 
   /**
    * Encrypt a string with Lit Protocol v8
    * In v8, encryption doesn't require authentication — only decryption does
+   * 
+   * SECURITY: No fallback encryption. If Lit Protocol is unavailable,
+   * this method throws an error and blocks the upload. Never silently
+   * degrade to local encryption — that would compromise access control.
    */
   async encryptMessage(
     message: string,
     datasetId: string
   ): Promise<EncryptionResult> {
-    if (this.useFallback) {
-      return await this.fallbackEncrypt(message);
-    }
-
     const client = await this.getClient();
-    if (!client) {
-      return await this.fallbackEncrypt(message);
-    }
 
     const unifiedAccessControlConditions = this.createUnifiedAccessControlConditions(datasetId);
 
@@ -301,22 +296,7 @@ class LitProtocolClient {
     const unifiedAccessControlConditions = this.createUnifiedAccessControlConditions(datasetId);
 
     try {
-      // Create EOA auth context for decryption
-      // Convert ethers signer to viem-compatible account
-      const address = await signer.getAddress();
-
-      const eoaAuthContext = await this.authManager.createEoaAuthContext({
-        config: { account: address as any },
-        authConfig: {
-          domain: window.location.hostname,
-          statement: 'Authorize Lit session for NeuroMarket dataset decryption',
-          resources: [
-            ['access-control-condition-decryption', '*'],
-          ],
-          expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        },
-        litClient: client,
-      });
+      const eoaAuthContext = await this.createEoaAuthContext(signer);
 
       // v8 API: litClient.decrypt()
       const decrypted = await client.decrypt({
@@ -349,6 +329,45 @@ class LitProtocolClient {
       throw new Error('Failed to decrypt file. Please ensure you have purchased access.');
     }
   }
+
+  async decryptMessage(
+    ciphertext: string,
+    dataToEncryptHash: string,
+    datasetId: string,
+    signer: ethers.Signer
+  ): Promise<string> {
+    const client = await this.getClient();
+    if (!client) {
+      throw new Error('Lit Protocol client not available for decryption.');
+    }
+
+    const unifiedAccessControlConditions = this.createUnifiedAccessControlConditions(datasetId);
+
+    try {
+      const eoaAuthContext = await this.createEoaAuthContext(signer);
+
+      const decrypted = await client.decrypt({
+        data: { ciphertext, dataToEncryptHash },
+        unifiedAccessControlConditions,
+        authContext: eoaAuthContext,
+        chain: this.config.chain,
+      });
+
+      return typeof decrypted === 'string' ? decrypted : decrypted.decryptedData;
+    } catch (error) {
+      console.error('[Lit v8] Decryption failed:', error);
+
+      if (error instanceof Error) {
+        if (error.message.includes('access') || error.message.includes('Access')) {
+          throw new Error('Access denied. You must purchase this dataset to decrypt it.');
+        }
+        if (error.message.includes('network') || error.message.includes('timeout')) {
+          throw new Error('Network error during decryption. Please try again.');
+        }
+      }
+      throw new Error('Failed to decrypt data. Please ensure you have purchased access.');
+    }
+  }
 }
 
 // ============================================================
@@ -357,7 +376,7 @@ class LitProtocolClient {
 
 const DEFAULT_CONFIG: LitConfig = {
   contractAddress: CONTRACT_ADDRESS,
-  chain: 'filecoin',
+  chain: 'filecoinCalibrationTestnet',
 };
 
 let litClient: LitProtocolClient | null = null;
@@ -373,7 +392,7 @@ function getLitClient(): LitProtocolClient {
  * Initialize Lit Protocol client with contract address and chain
  * Called from App.tsx at startup
  */
-export function initializeLitClient(contractAddress: string, chain: string = 'filecoin'): void {
+export function initializeLitClient(contractAddress: string, chain: string = 'filecoinCalibrationTestnet'): void {
   if (!contractAddress) {
     console.warn('[Lit v8] Contract address not provided. Encryption will not enforce access control.');
   }
@@ -408,6 +427,14 @@ export async function encryptFile(
   return await client.encryptFile(file, datasetId);
 }
 
+export async function encryptMessage(
+  message: string,
+  datasetId: string
+): Promise<EncryptionResult> {
+  const client = getLitClient();
+  return await client.encryptMessage(message, datasetId);
+}
+
 /**
  * Decrypt a file with Lit Protocol (convenience wrapper)
  */
@@ -430,6 +457,16 @@ export async function decryptFile(
     originalFileName,
     fileType
   );
+}
+
+export async function decryptMessage(
+  ciphertext: string,
+  dataToEncryptHash: string,
+  datasetId: string,
+  signer: ethers.Signer
+): Promise<string> {
+  const client = getLitClient();
+  return await client.decryptMessage(ciphertext, dataToEncryptHash, datasetId, signer);
 }
 
 export { LitProtocolClient };

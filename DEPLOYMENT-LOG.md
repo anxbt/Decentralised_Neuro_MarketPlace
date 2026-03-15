@@ -1,6 +1,6 @@
 # NeuroMarket — Deployment & Upload Log
 
-> **Documented**: March 9, 2026  
+> **Documented**: March 9, 2026 (updated March 10, 2026 — v2 contract with contentHash)  
 > **Network**: Filecoin FVM Calibration Testnet (chainId `314159`)
 
 ---
@@ -10,14 +10,15 @@
 | Field               | Value                                                                 |
 |---------------------|-----------------------------------------------------------------------|
 | **Contract**        | `NeuroMarketplace.sol`                                                |
-| **Address**         | `0x8F61BF10258AB489d841B5dEdB49A98f738Cc430`                          |
+| **Address**         | `0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b` (v2 — with contentHash) |
 | **Deployer**        | `0xC1F39FAcbB12C6abE4082D1448A7E79132bC4853`                          |
 | **Network**         | Filecoin FVM Calibration (chainId `314159`)                           |
-| **Deploy Tx**       | `0xa52ac6107448763568e0a917b2be4f52d6a863518b8dbd7771c0fcf3e5225017`   |
-| **Deploy Date**     | February 25, 2026                                                     |
-| **Block Explorer**  | https://calibration.filfox.info/en/address/0x8F61BF10258AB489d841B5dEdB49A98f738Cc430 |
-| **Deploy Script**   | `contracts/script/Deploy.s.sol`                                       |
-| **Deploy Command**  | `forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast --legacy` |
+| **Deploy Tx**       | `0x1a13e7830e98a31736892e14bd52ad2d1123ddab0eb6f9e1d454c35019497442`   |
+| **Deploy Date**     | March 10, 2026                                                        |
+| **Block Explorer**  | https://calibration.filfox.info/en/address/0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b |
+| **Deploy Script**   | N/A — deployed via `forge create` (see deploy command)                |
+| **Deploy Command**  | `forge create src/NeuroMarketplace.sol:NeuroMarketplace --rpc-url $RPC_URL --private-key $PRIVATE_KEY --legacy --gas-limit 300000000 --broadcast --retries 15 --timeout 600` |
+| **Previous (v1)**   | `0x8F61BF10258AB489d841B5dEdB49A98f738Cc430` (Feb 25, 2026 — no contentHash) |
 
 ---
 
@@ -103,8 +104,9 @@ calib.ezpdpz.net/pdp/piece?pieceCid=bafkzcibe4stw6en5sivckhpqn2wbjsbvfhc6ai7tuta
 ├─────────────────────────────────────────────────────────────┤
 │                   Smart Contract (Solidity)                  │
 │  NeuroMarketplace.sol                                       │
-│  Filecoin Calibration: 0x8F61BF1...Cc430                    │
-│  Functions: listDataset, purchaseDataset, hasAccess          │
+│  Filecoin Calibration: 0x0D6C08C...c2b (v2)                 │
+│  Functions: registerDataset(+contentHash), purchaseDataset,  │
+│             hasAccess, getDataset                            │
 ├─────────────────────────────────────────────────────────────┤
 │                        Storage                              │
 │  Filecoin (via Synapse SDK) — encrypted dataset files       │
@@ -133,7 +135,8 @@ calib.ezpdpz.net/pdp/piece?pieceCid=bafkzcibe4stw6en5sivckhpqn2wbjsbvfhc6ai7tuta
 
 ## 5. Key Addresses & Links
 
-- **Contract**: [`0x8F61BF10258AB489d841B5dEdB49A98f738Cc430`](https://calibration.filfox.info/en/address/0x8F61BF10258AB489d841B5dEdB49A98f738Cc430)
+- **Contract (v2)**: [`0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b`](https://calibration.filfox.info/en/address/0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b)
+- **Contract (v1)**: [`0x8F61BF10258AB489d841B5dEdB49A98f738Cc430`](https://calibration.filfox.info/en/address/0x8F61BF10258AB489d841B5dEdB49A98f738Cc430) *(no contentHash — superseded)*
 - **Deployer**: `0xC1F39FAcbB12C6abE4082D1448A7E79132bC4853`
 - **Faucet**: https://faucet.calibration.fildev.network/
 - **Block Explorer**: https://calibration.filfox.info/

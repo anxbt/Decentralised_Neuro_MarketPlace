@@ -1,7 +1,7 @@
-NeuroMarketplace Contract Address: 0x8F61BF10258AB489d841B5dEdB49A98f738Cc430
+NeuroMarketplace Contract Address: 0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b
 Deployer Address: 0xC1F39FAcbB12C6abE4082D1448A7E79132bC4853
 Network: Filecoin FVM Calibration (chainId 314159)
-Transaction Hash: 0xa52ac6107448763568e0a917b2be4f52d6a863518b8dbd7771c0fcf3e5225017
-Deployed: February 25, 2026
+Transaction Hash: 0x1a13e7830e98a31736892e14bd52ad2d1123ddab0eb6f9e1d454c35019497442
+Deployed: March 10, 2026 (v2 with contentHash)
 
-Block Explorer: https://calibration.filfox.info/en/address/0x8F61BF10258AB489d841B5dEdB49A98f738Cc430
+Block Explorer: https://calibration.filfox.info/en/address/0x0D6C08C9c7031747fe31eDF09EfA9303FC9f3c2b
